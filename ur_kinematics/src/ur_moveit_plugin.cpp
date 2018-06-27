@@ -72,7 +72,7 @@
 
 /* Author: Sachin Chitta, David Lu!!, Ugo Cupcic */
 
-#include <class_loader/class_loader.h>
+#include <class_loader/class_loader.hpp>
 
 //#include <tf/transform_datatypes.h>
 #include <tf_conversions/tf_kdl.h>
@@ -138,7 +138,7 @@ void URKinematicsPlugin::getRandomConfiguration(const KDL::JntArray &seed_state,
   }
 
   joint_model_group_->getVariableRandomPositionsNearBy(state_->getRandomNumberGenerator(), values, near, consistency_limits_mimic);
-  
+
   for (std::size_t i = 0; i < dimension_; ++i)
   {
     bool skip = false;
@@ -165,6 +165,38 @@ bool URKinematicsPlugin::checkConsistency(const KDL::JntArray& seed_state,
   return true;
 }
 
+// From https://stackoverflow.com/a/12605002/7476183 {
+namespace {
+    template<class SharedPointer> struct Holder {
+        SharedPointer p;
+
+        Holder(const SharedPointer &p) : p(p) {}
+        Holder(const Holder &other) : p(other.p) {}
+        Holder(Holder &&other) : p(std::move(other.p)) {}
+
+        void operator () (...) { p.reset(); }
+    };
+}
+
+template<class T> std::shared_ptr<T> to_std_ptr(const boost::shared_ptr<T> &p) {
+    typedef Holder<std::shared_ptr<T>> H;
+    if(H *h = boost::get_deleter<H, T>(p)) {
+        return h->p;
+    } else {
+        return std::shared_ptr<T>(p.get(), Holder<boost::shared_ptr<T>>(p));
+    }
+}
+
+template<class T> boost::shared_ptr<T> to_boost_ptr(const std::shared_ptr<T> &p){
+    typedef Holder<boost::shared_ptr<T>> H;
+    if(H * h = std::get_deleter<H, T>(p)) {
+        return h->p;
+    } else {
+        return boost::shared_ptr<T>(p.get(), Holder<std::shared_ptr<T>>(p));
+    }
+}
+// }
+
 bool URKinematicsPlugin::initialize(const std::string &robot_description,
                                      const std::string& group_name,
                                      const std::string& base_frame,
@@ -175,12 +207,12 @@ bool URKinematicsPlugin::initialize(const std::string &robot_description,
 
   ros::NodeHandle private_handle("~");
   rdf_loader::RDFLoader rdf_loader(robot_description_);
-  const boost::shared_ptr<srdf::Model> &srdf = rdf_loader.getSRDF();
-#if ROS_VERSION_MINIMUM(1, 13, 0) 
+  const std::shared_ptr<srdf::Model> &srdf = rdf_loader.getSRDF();
+//#if ROS_VERSION_MINIMUM(1, 13, 0)
   const std::shared_ptr<urdf::ModelInterface>& urdf_model = rdf_loader.getURDF();
-#else
+/*#else
   const boost::shared_ptr<urdf::ModelInterface>& urdf_model = rdf_loader.getURDF();
-#endif
+#endif*/
 
   if (!urdf_model || !srdf)
   {
@@ -193,7 +225,7 @@ bool URKinematicsPlugin::initialize(const std::string &robot_description,
   robot_model::JointModelGroup* joint_model_group = robot_model_->getJointModelGroup(group_name);
   if (!joint_model_group)
     return false;
-  
+
   if(!joint_model_group->isChain())
   {
     ROS_ERROR_NAMED("kdl","Group '%s' is not a chain", group_name.c_str());
@@ -275,7 +307,7 @@ bool URKinematicsPlugin::initialize(const std::string &robot_description,
   for (std::size_t i = 0; i < kdl_chain_.getNrOfSegments(); ++i)
   {
     const robot_model::JointModel *jm = robot_model_->getJointModel(kdl_chain_.segments[i].getJoint().getName());
-    
+
     //first check whether it belongs to the set of active joints in the group
     if (jm->getMimic() == NULL && jm->getVariableCount() > 0)
     {
@@ -353,14 +385,14 @@ bool URKinematicsPlugin::initialize(const std::string &robot_description,
   for(int i=1; i<6; i++) {
     cur_ur_joint_ind = getJointIndex(ur_joint_names_[i]);
     if(cur_ur_joint_ind < 0) {
-      ROS_ERROR_NAMED("kdl", 
-        "Kin chain provided in model doesn't contain standard UR joint '%s'.", 
+      ROS_ERROR_NAMED("kdl",
+        "Kin chain provided in model doesn't contain standard UR joint '%s'.",
         ur_joint_names_[i].c_str());
       return false;
     }
     if(cur_ur_joint_ind != last_ur_joint_ind + 1) {
-      ROS_ERROR_NAMED("kdl", 
-        "Kin chain provided in model doesn't have proper serial joint order: '%s'.", 
+      ROS_ERROR_NAMED("kdl",
+        "Kin chain provided in model doesn't have proper serial joint order: '%s'.",
         ur_joint_names_[i].c_str());
       return false;
     }
@@ -638,7 +670,7 @@ bool URKinematicsPlugin::searchPositionIK(const geometry_msgs::Pose &ik_pose,
     // Convert into query for analytic solver
     tf::poseMsgToKDL(ik_pose, kdl_ik_pose);
     kdl_ik_pose_ur_chain = pose_base.Inverse() * kdl_ik_pose * pose_tip.Inverse();
-    
+
     kdl_ik_pose_ur_chain.Make4x4((double*) homo_ik_pose);
 #if KDL_OLD_BUG_FIX
     // in older versions of KDL, setting this flag might be necessary
@@ -647,10 +679,10 @@ bool URKinematicsPlugin::searchPositionIK(const geometry_msgs::Pose &ik_pose,
     /////////////////////////////////////////////////////////////////////////////
 
     // Do the analytic IK
-    num_sols = inverse((double*) homo_ik_pose, (double*) q_ik_sols, 
+    num_sols = inverse((double*) homo_ik_pose, (double*) q_ik_sols,
                        jnt_pos_test(ur_joint_inds_start_+5));
-    
-    
+
+
     uint16_t num_valid_sols;
     std::vector< std::vector<double> > q_ik_valid_sols;
     for(uint16_t i=0; i<num_sols; i++)
@@ -658,11 +690,11 @@ bool URKinematicsPlugin::searchPositionIK(const geometry_msgs::Pose &ik_pose,
       bool valid = true;
       std::vector< double > valid_solution;
       valid_solution.assign(6,0.0);
-      
+
       for(uint16_t j=0; j<6; j++)
       {
         if((q_ik_sols[i][j] <= ik_chain_info_.limits[j].max_position) && (q_ik_sols[i][j] >= ik_chain_info_.limits[j].min_position))
-        { 
+        {
           valid_solution[j] = q_ik_sols[i][j];
           valid = true;
           continue;
@@ -685,14 +717,14 @@ bool URKinematicsPlugin::searchPositionIK(const geometry_msgs::Pose &ik_pose,
           break;
         }
       }
-      
+
       if(valid)
       {
         q_ik_valid_sols.push_back(valid_solution);
       }
     }
-     
-     
+
+
     // use weighted absolute deviations to determine the solution closest the seed state
     std::vector<idx_double> weighted_diffs;
     for(uint16_t i=0; i<q_ik_valid_sols.size(); i++) {
