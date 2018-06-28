@@ -9,13 +9,20 @@ arm_controller:
      - wrist_3_joint
   constraints:
       goal_time: 0.6
-      stopped_velocity_tolerance: 0.05
+      stopped_velocity_tolerance: 0.075
       shoulder_pan_joint: {trajectory: 0.1, goal: 0.1}
       shoulder_lift_joint: {trajectory: 0.1, goal: 0.1}
       elbow_joint: {trajectory: 0.1, goal: 0.1}
       wrist_1_joint: {trajectory: 0.1, goal: 0.1}
       wrist_2_joint: {trajectory: 0.1, goal: 0.1}
       wrist_3_joint: {trajectory: 0.1, goal: 0.1}
-  stop_trajectory_duration: 0.5
+  gains: # Req. for effort interfaces - and this simulation?
+    shoulder_pan_joint: {p: 6000.0, i: 1500.0, d: 150.0, i_clamp_max: 15.0, i_clamp_min: -15.0}
+    shoulder_lift_joint: {p: 3000.0, i: 750.0, d: 150.0, i_clamp_max: 15.0, i_clamp_min: -15.0}
+    elbow_joint: {p: 2250.0, i: 750.0, d: 75.0, i_clamp_max: 15.0, i_clamp_min: -15.0 }
+    wrist_1_joint: {p: 1050.0, i: 300.0, d: 15.0, i_clamp: 0.0}
+    wrist_3_joint: {p: 1050.0, i: 300.0, d: 15.0, i_clamp: 0.0}
+    wrist_2_joint: {p: 1050.0, i: 300.0, d: 15.0, i_clamp: 0.0}
+  stop_trajectory_duration: 0.75
   state_publish_rate:  25
   action_monitor_rate: 10
